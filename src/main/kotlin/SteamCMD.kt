@@ -4,11 +4,11 @@ import kotlinx.coroutines.flow.flow
 import java.io.IOException
 import java.nio.file.Path
 
-
 /**
- * Represents a class to run SteamCMD commands and parse their output.
- * Mainly used to install and update games.
- * */
+ * Runs SteamCMD commands and parses their output for status updates.
+ *
+ * @constructor Accepts the path to the SteamCMD installation.
+ */
 class SteamCMD(steamCmdPath: Path) {
 
     private val steamCMDUpdatingRegex = Regex(""".*\[\s*(\d+)%\]\s*(Downloading update|Download Complete).*""")
@@ -17,6 +17,12 @@ class SteamCMD(steamCmdPath: Path) {
     private val failureRegex = Regex(""".*Error! App '(\d+)' state is (0x[0-9a-fA-F]+) after update job\..*""")
     private val installer: Installer = Installer(steamCmdPath)
 
+    /**
+     * Runs a list of SteamCMD commands as a coroutine flow, emitting status updates.
+     * @param commands List of commands to run.
+     * @return Flow emitting [Status] updates.
+     * @throws IOException if SteamCMD is not installed.
+     */
     fun runAsFlow(commands: List<String>): Flow<Status> = flow {
         if (!installer.isInstalled()) {
             throw IOException("SteamCMD is not installed at ${installer.installPath}")
@@ -45,6 +51,11 @@ class SteamCMD(steamCmdPath: Path) {
         process.destroy()
     }
 
+    /**
+     * Parses a line of SteamCMD output and returns a [Status] if recognized.
+     * @param line Output line from SteamCMD.
+     * @return [Status] or null if not recognized.
+     */
     private fun parseStatusLine(line: String): Status? {
         val line = line.trim()
         return when {
@@ -57,6 +68,7 @@ class SteamCMD(steamCmdPath: Path) {
                     return null
                 }
             }
+
             line.contains("[----] Installing update...") -> SteamCMDInstalling()
             line.contains("[----] Update complete, launching...") -> Preparing()
             line.contains("-- type 'quit' to exit --") -> Preparing()

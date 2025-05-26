@@ -1,12 +1,12 @@
 import java.io.File
 import java.net.URI
-import java.net.URL
 import java.nio.file.Path
 
-
 /**
- * Represents a class to install SteamCMD.
- * */
+ * Handles downloading and installing SteamCMD to a specified directory.
+ *
+ * @property installPath The path where SteamCMD will be installed.
+ */
 class Installer(
     val installPath: Path = Path.of("${System.getProperty("user.home")}\\AppData\\Local\\SteamCMD")
 ) {
@@ -27,13 +27,21 @@ class Installer(
             throw UnsupportedOperationException("Unsupported operating system")
         }
 
-    val cmdPath : Path
+    val cmdPath: Path
         get() = installPath.resolve(commandName)
 
+    /**
+     * Checks if SteamCMD is already installed.
+     * @return true if installed, false otherwise.
+     */
     fun isInstalled(): Boolean {
         return cmdPath.toFile().exists()
     }
 
+    /**
+     * Installs SteamCMD by downloading and extracting it if not already installed.
+     * @return Result indicating success or failure.
+     */
     fun install(): Result<Boolean> {
         if (isInstalled()) {
             return Result.success(true)
@@ -80,3 +88,4 @@ class Installer(
         }
     }
 }
+
