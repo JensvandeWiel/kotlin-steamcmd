@@ -1,4 +1,6 @@
 import com.pty4j.PtyProcessBuilder
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import java.io.IOException
@@ -11,10 +13,15 @@ import java.nio.file.Path
  */
 class SteamCMD(steamCmdPath: Path) {
 
-    private val steamCMDUpdatingRegex = Regex(""".*\[\s*(\d+)%\]\s*(Downloading update|Download Complete).*""")
-    private val statusRegex = Regex(""".*Update state \([^)]+\)\s+([a-zA-Z ]+), progress: (\d+\.\d+).*""")
+    private val steamCMDUpdatingRegex =
+        Regex(""".*\[\s*(\d+)%\]\s*(Downloading update|Download Complete).*""", RegexOption.IGNORE_CASE)
+    private val statusRegex =
+        Regex(""".*Update state \([^)]+\)\s+([a-zA-Z ]+), progress: (\d+(?:\.\d+)?).*""", RegexOption.IGNORE_CASE)
     private val successRegex = Regex(""".*Success! App '(\d+)' fully installed\..*""")
-    private val failureRegex = Regex(""".*Error! App '(\d+)' state is (0x[0-9a-fA-F]+) after update job\..*""")
+    private val failureRegex =
+        Regex(""".*Error!\s+App\s+'(\d+)'\s+state\s+is(?:\s+is)?\s+(0x[0-9a-fA-F]+)\s+after update job\..*""", RegexOption.IGNORE_CASE)
+    private val failureNoAppRegex =
+        Regex(""".*Error!\s+State\s+is\s+(0x[0-9a-fA-F]+)\s+after update job\..*""", RegexOption.IGNORE_CASE)
     private val installer: Installer = Installer(steamCmdPath)
 
     /**
@@ -34,21 +41,26 @@ class SteamCMD(steamCmdPath: Path) {
         cmdList.add("+quit")
 
         val process = PtyProcessBuilder().setCommand(cmdList.toTypedArray()).start()
-        val reader = process.inputStream.bufferedReader()
         try {
-            while (true) {
-                val line = reader.readLine() ?: break
-                parseStatusLine(line)?.let { status -> emit(status) }
+            process.inputStream.bufferedReader().use { reader ->
+                while (true) {
+                    currentCoroutineContext().ensureActive()
+                    val line = reader.readLine() ?: break
+                    parseStatusLine(line)?.let { status -> emit(status) }
+                }
             }
+            val exitCode = process.waitFor()
+            // Exit code 0 means success, 7 is fine as well.
+            if (exitCode != 0 && exitCode != 7) emit(Error(exitCode))
+
         } finally {
-            reader.close()
+            if (process.isAlive) {
+                process.destroy()
+                if (process.isAlive) {
+                    process.destroyForcibly()
+                }
+            }
         }
-
-        val exitCode = process.waitFor()
-        // Exit code 0 means success, 7 is fine as well.
-        if (exitCode != 0 && exitCode != 7) emit(Error(exitCode))
-
-        process.destroy()
     }
 
     /**
@@ -56,13 +68,15 @@ class SteamCMD(steamCmdPath: Path) {
      * @param line Output line from SteamCMD.
      * @return [Status] or null if not recognized.
      */
-    private fun parseStatusLine(line: String): Status? {
+    internal fun parseStatusLine(line: String): Status? {
         val line = line.trim()
         return when {
             steamCMDUpdatingRegex.matches(line) -> {
                 val matchResult = steamCMDUpdatingRegex.find(line)!!
                 val progress = matchResult.groupValues[1].toFloat()
-                return if (matchResult.groupValues[2] == "Downloading update" || matchResult.groupValues[2] == "Download Complete") {
+                return if (matchResult.groupValues[2].equals("Downloading update", ignoreCase = true) ||
+                    matchResult.groupValues[2].equals("Download Complete", ignoreCase = true)
+                ) {
                     SteamCMDUpdating(progress)
                 } else {
                     return null
@@ -74,12 +88,16 @@ class SteamCMD(steamCmdPath: Path) {
             line.contains("-- type 'quit' to exit --") -> Preparing()
             statusRegex.matches(line) -> {
                 val matchResult = statusRegex.find(line)!!
-                val statusType = matchResult.groupValues[1]
+                val statusType = matchResult.groupValues[1].trim().lowercase().replace(Regex("""\s+"""), " ")
                 val progress = matchResult.groupValues[2].toFloat()
                 return when (statusType) {
                     "downloading" -> Downloading(progress)
                     "verifying update" -> Validating(progress)
                     "verifying install" -> Validating(progress)
+                    "validating" -> Validating(progress)
+                    "reconfiguring" -> Reconfiguring(progress)
+                    "preallocating" -> Preallocating(progress)
+                    "committing" -> Committing(progress)
                     else -> null
                 }
             }
@@ -96,6 +114,12 @@ class SteamCMD(steamCmdPath: Path) {
                 val hexCode = matchResult.groupValues[2]
                 val errorCode = fromHexCode(hexCode)
                 return Failed(appId, errorCode)
+            }
+
+            failureNoAppRegex.matches(line) -> {
+                val matchResult = failureNoAppRegex.find(line)!!
+                val errorCode = fromHexCode(matchResult.groupValues[1])
+                return Failed(-1, errorCode)
             }
 
             else -> null

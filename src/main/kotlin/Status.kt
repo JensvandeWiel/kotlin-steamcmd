@@ -30,6 +30,21 @@ data class Downloading(val progress: Float) : Status()
 data class Validating(val progress: Float) : Status()
 
 /**
+ * Status for reconfiguring an app, includes progress percentage.
+ */
+data class Reconfiguring(val progress: Float) : Status()
+
+/**
+ * Status for preallocating files, includes progress percentage.
+ */
+data class Preallocating(val progress: Float) : Status()
+
+/**
+ * Status for committing updated files, includes progress percentage.
+ */
+data class Committing(val progress: Float) : Status()
+
+/**
  * Status for a successfully installed app, includes appId.
  */
 data class Installed(val appId: Int) : Status()

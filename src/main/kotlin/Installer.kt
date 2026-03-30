@@ -1,5 +1,6 @@
 import java.io.File
 import java.net.URI
+import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -29,6 +30,15 @@ class Installer(
 
     val cmdPath: Path
         get() = installPath.resolve(commandName)
+
+    internal fun resolveInstallEntryPath(entryName: String): Path {
+        val normalizedInstallPath = installPath.toAbsolutePath().normalize()
+        val resolvedPath = normalizedInstallPath.resolve(entryName).normalize()
+        if (!resolvedPath.startsWith(normalizedInstallPath)) {
+            throw SecurityException("Blocked zip entry outside install directory: $entryName")
+        }
+        return resolvedPath
+    }
 
     /**
      * Checks if SteamCMD is already installed.
@@ -63,14 +73,17 @@ class Installer(
         }
 
         try {
-            val zipFile = java.util.zip.ZipFile(tempFile)
-            zipFile.entries().asSequence().forEach { entry ->
-                if (!entry.isDirectory) {
-                    val outputFile = installPath.resolve(entry.name).toFile()
-                    outputFile.parentFile.mkdirs()
-                    zipFile.getInputStream(entry).use { input ->
-                        outputFile.outputStream().use { output ->
-                            input.copyTo(output)
+            java.util.zip.ZipFile(tempFile).use { zipFile ->
+                zipFile.entries().asSequence().forEach { entry ->
+                    val outputPath = resolveInstallEntryPath(entry.name)
+                    if (entry.isDirectory) {
+                        Files.createDirectories(outputPath)
+                    } else {
+                        Files.createDirectories(outputPath.parent)
+                        zipFile.getInputStream(entry).use { input ->
+                            Files.newOutputStream(outputPath).use { output ->
+                                input.copyTo(output)
+                            }
                         }
                     }
                 }
