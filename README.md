@@ -10,5 +10,5 @@ A Kotlin application to automate the installation and updating of SteamCMD and g
 
 ## Requirements
 
-- JDK 21 or higher
+- JDK 25 or higher
 - Windows OS (SteamCMD installer is Windows-only in this project)

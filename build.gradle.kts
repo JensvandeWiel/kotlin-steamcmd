@@ -1,5 +1,5 @@
 plugins {
-    kotlin("jvm") version "2.1.20"
+    kotlin("jvm") version "2.3.20"
     id("maven-publish")
 }
 
@@ -21,7 +21,7 @@ tasks.test {
     useJUnitPlatform()
 }
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(25)
 }
 
 val sourcesJar by tasks.registering(Jar::class) {
