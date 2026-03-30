@@ -19,7 +19,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '25'
-          distribution: 'jetbrains'
+          distribution: 'corretto'
           cache: gradle
 
       - name: Set up Gradle

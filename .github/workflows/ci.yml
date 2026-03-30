@@ -19,7 +19,7 @@ jobs:
       - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
-          distribution: jetbrains
+          distribution: corretto
           java-version: '25'
           cache: gradle
 
