@@ -41,6 +41,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Update version in build.gradle.kts
+        shell: bash
         run: |
           sed -i "s/version = \".*\"/version = \"${{ steps.get_version.outputs.VERSION }}\"/" build.gradle.kts
 
